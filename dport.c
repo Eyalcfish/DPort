@@ -2,6 +2,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
+
 // typedef struct DConnection {
 //     size_t shm_size;
 //     char* port_name;
@@ -13,14 +14,13 @@
 //     void* data;
 // } DMessage;
 
-
 /*Create a shared memory connection at id/port <port> and size <shm_size> */
-DConnection* create_dconnection(const char* port_name, size_t shm_size) {
+DConnection* create_dconnection(const char* port_name, size_t shm_size, char spinning_connection) {
     DConnection* conn = (DConnection*)malloc(sizeof(DConnection));
 
     conn->port_name = strdup(port_name);
     conn->shm_size = shm_size;
-
+    conn->spinning_connection = spinning_connection;
     shm_size += sizeof(DConnectionHeader);
 
     #ifdef _WIN32
@@ -54,8 +54,10 @@ DConnection* create_dconnection(const char* port_name, size_t shm_size) {
     conn->hEvent = CreateEvent(NULL, FALSE, FALSE, event_name);
     #endif
 
-    *((DConnectionHeader*)conn->shm_ptr) = (DConnectionHeader){.shm_size = conn->shm_size};
+    *((DConnectionHeader*)conn->shm_ptr) = (DConnectionHeader){.shm_size = conn->shm_size, .spinning_connection = conn->spinning_connection, .ready_flag_client = 1, .ready_flag_server = 1};
     conn->shm_ptr += sizeof(DConnectionHeader);
+
+    conn->identifier = 1;
 
     return conn;
 }
@@ -77,23 +79,26 @@ DConnection* connect_dconnection(const char* port_name) {
     }
 
     conn->shm_ptr = (void*) MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, 0);
-
+    
     if (conn->shm_ptr == NULL) {
         printf(TEXT("Could not map view of file (%d).\n"), GetLastError());
         CloseHandle(hMapFile);
     }
-
+    
     conn->hMapFile = hMapFile;
-
+    
     char event_name[256];
     snprintf(event_name, sizeof(event_name), "%s_event", port_name);
-
+    
     conn->hEvent = OpenEvent(EVENT_ALL_ACCESS, FALSE, event_name);
     
     #endif
-
+    
     conn->shm_size = ((DConnectionHeader*)conn->shm_ptr)->shm_size;
+    conn->spinning_connection = ((DConnectionHeader*)conn->shm_ptr)->spinning_connection;
     conn->shm_ptr += sizeof(DConnectionHeader);
+
+    conn->identifier = 0;
 
     return conn;
 }
@@ -113,23 +118,58 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
         return;
     }
 
+    DConnectionHeader* conn_header = ((DConnectionHeader*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)));
+    unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_server : &conn_header->ready_flag_client;
+    
+    
+    while (!*flag_ptr) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
+        // _mm_pause();
+    }
+    
     *((size_t*)conn->shm_ptr) = msg->size;
     memcpy((char*)conn->shm_ptr+sizeof(size_t), msg->data, msg->size);
+    
+    __sync_synchronize();
+    __sync_lock_test_and_set(flag_ptr, 0);
+    
+    if (!conn->spinning_connection) {
+        SetEvent(conn->hEvent);
+    }
+    
     #ifdef _WIN32
-    SetEvent(conn->hEvent);
     #endif
 }
 
 /*Read data from the shared memory connection */
 DMessage wait_for_new_message_from_dconnection(DConnection* conn) {
     
-    #ifdef _WIN32
-    WaitForSingleObject(conn->hEvent, INFINITE);
-    #endif
+    DConnectionHeader* conn_header = ((DConnectionHeader*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)));
+    unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_client : &conn_header->ready_flag_server;
+    
+    if (conn->spinning_connection) {
+        while (*flag_ptr) {
+            _mm_pause();
+        }
+    } else {
+        for(int i = 0 ; i < 100000 && *flag_ptr; i++) {
+            _mm_pause();
+        }
+        #ifdef _WIN32
+        while (*flag_ptr) {
+            // Use a timeout (e.g. 10ms) to "self-heal" if a signal is missed
+            WaitForSingleObject(conn->hEvent, 1);
+        }
+        #endif
+    }
 
     DMessage msg;
-    msg.size = * (size_t*)conn->shm_ptr;
-    msg.data = conn->shm_ptr+sizeof(size_t);
+    msg.size = *(size_t*)conn->shm_ptr;
 
+    msg.data = malloc(msg.size);
+    memcpy(msg.data, (char*)conn->shm_ptr+sizeof(size_t), msg.size);
+    __sync_synchronize();
+
+    __sync_lock_test_and_set(flag_ptr, 1);
+ 
     return msg;
 }

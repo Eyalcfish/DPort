@@ -25,19 +25,27 @@ int main(int argc, char** argv) {
     if (strcmp(argv[1], "server") == 0) {
         // --- SERVER MODE ---
         printf("[SERVER] Initializing DPort...\n");
-        DConnection* conn = create_dconnection("example_port", 1024);
+        DConnection* conn = create_dconnection("example_port", 1024, 1);
         
+        // WARM-UP: Get the CPU out of power-saving mode
+        for(int i = 0; i < 10000; i++) {
+            DMessage msg = wait_for_new_message_from_dconnection(conn);
+            write_to_dconnection(conn, &msg);
+            free(msg.data);
+        }
+
         printf("[SERVER] Ready. Waiting for 1,000,000 pings...\n");
         for(int i = 0; i < 1000000; i++) {
             // Wait for message from client
             DMessage msg = wait_for_new_message_from_dconnection(conn);
-            
+
             // Immediately send it back (Ping-Pong)
             write_to_dconnection(conn, &msg);
+            free(msg.data);
         }
         printf("[SERVER] Benchmark complete.\n");
         close_dconnection(conn);
-
+        
     } else if (strcmp(argv[1], "client") == 0) {
         // --- CLIENT MODE ---
         printf("[CLIENT] Connecting to DPort...\n");
@@ -47,7 +55,7 @@ int main(int argc, char** argv) {
         char* data = "ping";
         msg.size = strlen(data) + 1;
         msg.data = data;
-
+        
         printf("[CLIENT] Starting Benchmark (1,000,000 iterations)...\n");
         
         // WARM-UP: Get the CPU out of power-saving mode
@@ -55,11 +63,12 @@ int main(int argc, char** argv) {
             write_to_dconnection(conn, &msg);
             wait_for_new_message_from_dconnection(conn);
         }
-
+        
         long long start = get_nanos();
         for(int i = 0; i < 1000000; i++) {
             write_to_dconnection(conn, &msg);
-            wait_for_new_message_from_dconnection(conn);
+            DMessage response = wait_for_new_message_from_dconnection(conn);
+            free(response.data);
         }
         long long end = get_nanos();
 

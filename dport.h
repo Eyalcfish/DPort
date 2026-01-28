@@ -7,8 +7,10 @@
 
 typedef struct DConnection {
     size_t shm_size;
+    char identifier;
     char* port_name;
     void* shm_ptr;
+    char spinning_connection;
     #ifdef _WIN32
     HANDLE hMapFile;
     HANDLE hEvent;
@@ -17,6 +19,9 @@ typedef struct DConnection {
 
 typedef struct __attribute__((packed)) DConnectionHeader {
     size_t shm_size;
+    char spinning_connection;
+    unsigned char ready_flag_server;
+    unsigned char ready_flag_client;
 } DConnectionHeader;
 
 typedef struct DMessage {
@@ -25,7 +30,7 @@ typedef struct DMessage {
 } DMessage;
 
 /*Create a shared memory connection at id/port <port> and size <shm_size> at most */
-DConnection* create_dconnection(const char* port_name, size_t shm_size);
+DConnection* create_dconnection(const char* port_name, size_t shm_size, char spinning_connection);
 
 /*Connect to an existing shared memory connection at id/port <port> */
 DConnection* connect_dconnection(const char* port_name);
