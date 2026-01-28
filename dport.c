@@ -114,7 +114,8 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
         printf("Message size exceeds shared memory size\n");
         return;
     }
-    memcpy((char*)conn->shm_ptr, msg->data, msg->size);
+    *((size_t*)conn->shm_ptr) = msg->size;
+    memcpy((char*)conn->shm_ptr+sizeof(size_t), msg->data, msg->size);
     SetEvent(conn->hEvent);
 }
 
@@ -125,7 +126,7 @@ DMessage wait_for_new_message_from_dconnection(DConnection* conn) {
     WaitForSingleObject(conn->hEvent, INFINITE);
     #endif
     DMessage msg;
-    msg.size = conn->shm_size;
-    msg.data = conn->shm_ptr;
+    msg.size = * (size_t*)conn->shm_ptr;
+    msg.data = conn->shm_ptr+sizeof(size_t);
     return msg;
 }
