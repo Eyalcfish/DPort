@@ -1,7 +1,9 @@
 #include <stdio.h>
-#include "dport.h"
+#include <string.h>
 #include <windows.h>
+#include "dport.h"
 
+// --- High-Res Timer Implementation ---
 long long get_nanos() {
     static LARGE_INTEGER frequency;
     static int initialized = 0;
@@ -11,38 +13,63 @@ long long get_nanos() {
     }
     LARGE_INTEGER counter;
     QueryPerformanceCounter(&counter);
-    // Convert to nanoseconds: (counter * 1,000,000,000) / frequency
     return (long long)((counter.QuadPart * 1000000000LL) / frequency.QuadPart);
 }
 
-void gemini_benchmarking(DConnection* conn, DMessage msg) {
-    for(int i = 0; i < 10000; i++) { // Warm-up
-        write_to_dconnection(conn, &msg);
-        wait_for_new_message_from_dconnection(conn);
-    }
-    // Pseudo-code for Benchmarking
-    long long start = get_nanos();
-    for(int i = 0; i < 10000000; i++) {
-        write_to_dconnection(conn, &msg);
-        wait_for_new_message_from_dconnection(conn); // Wait for Ack
-    }
-    long long end = get_nanos();
-    printf("Average Latency: %lld ns\n", (end - start) / 10000000);
-}
-
 int main(int argc, char** argv) {
-    DConnection* conn = create_dconnection("example_port", 1024);
-    // DConnection* conn = connect_dconnection("example_port");
+    if (argc < 2) {
+        printf("Usage: %s <server|client>\n", argv[0]);
+        return 1;
+    }
 
-    printf("DEBUG: Flag address: %p | Data address: %p\n", 
-       (void*)((char*)conn->shm_ptr - 1), conn->shm_ptr);
+    if (strcmp(argv[1], "server") == 0) {
+        // --- SERVER MODE ---
+        printf("[SERVER] Initializing DPort...\n");
+        DConnection* conn = create_dconnection("example_port", 1024);
+        
+        printf("[SERVER] Ready. Waiting for 1,000,000 pings...\n");
+        for(int i = 0; i < 1000000; i++) {
+            // Wait for message from client
+            DMessage msg = wait_for_new_message_from_dconnection(conn);
+            
+            // Immediately send it back (Ping-Pong)
+            write_to_dconnection(conn, &msg);
+        }
+        printf("[SERVER] Benchmark complete.\n");
+        close_dconnection(conn);
 
-    DMessage msg;
-    msg.size = strlen(argv[1]) + 1;
-    msg.data = argv[1];
+    } else if (strcmp(argv[1], "client") == 0) {
+        // --- CLIENT MODE ---
+        printf("[CLIENT] Connecting to DPort...\n");
+        DConnection* conn = connect_dconnection("example_port");
+        
+        DMessage msg;
+        char* data = "ping";
+        msg.size = strlen(data) + 1;
+        msg.data = data;
 
-    gemini_benchmarking(conn, msg);
+        printf("[CLIENT] Starting Benchmark (1,000,000 iterations)...\n");
+        
+        // WARM-UP: Get the CPU out of power-saving mode
+        for(int i = 0; i < 10000; i++) {
+            write_to_dconnection(conn, &msg);
+            wait_for_new_message_from_dconnection(conn);
+        }
 
-    close_dconnection(conn);
+        long long start = get_nanos();
+        for(int i = 0; i < 1000000; i++) {
+            write_to_dconnection(conn, &msg);
+            wait_for_new_message_from_dconnection(conn);
+        }
+        long long end = get_nanos();
+
+        printf("\n--- RESULTS ---\n");
+        printf("Total Time:    %lld ns\n", (end - start));
+        printf("Avg Round-Trip: %lld ns\n", (end - start) / 1000000);
+        printf("One-Way Latency: ~%lld ns\n", ((end - start) / 1000000) / 2);
+        
+        close_dconnection(conn);
+    }
+
     return 0;
 }
