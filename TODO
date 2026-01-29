@@ -1,8 +1,13 @@
-linux implementation
-make the ready flag 1 byte and not 2
-check the dynamic hybrid cycles option
-add zero copy option
 implement seperate thread queing
-add multiple clients communication
+
+check the dynamic hybrid cycles option
+
 check out everything is actually safe
+
+linux implementation
+
+add multiple clients communication
+
+add zero copy option #DISCONTINUED FOR NOW
+
 implement tsx?

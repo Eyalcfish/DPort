@@ -48,4 +48,8 @@ void write_to_dconnection(DConnection* conn, DMessage* msg);
 /*Read data from the shared memory connection */
 DMessage wait_for_new_message_from_dconnection(DConnection* conn);
 
+void* get_pointer_for_new_message_dconnection(DConnection* conn, size_t msg_size);
+
+void publish_new_message_dconnection(DConnection* conn);
+
 #endif

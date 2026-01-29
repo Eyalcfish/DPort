@@ -2,7 +2,7 @@
 #include "dport.h"
 
 int main() {
-    DConnection* conn = create_dconnection("example_port", 1024, EVENT_BASED_CONNECTION);
+    DConnection* conn = create_dconnection("example_port", 1024, HYBRID_CONNECTION);
     
     printf("DEBUG: Flag address: %p | Data address: %p\n", (void*)((char*)conn->shm_ptr - 1), conn->shm_ptr);
     

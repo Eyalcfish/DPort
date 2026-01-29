@@ -122,7 +122,7 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
     unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_server : &conn_header->ready_flag_client;
     
     
-    while (!*flag_ptr) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
+    while (!*flag_ptr || *flag_ptr == 2) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
         _mm_pause();
     }
     
@@ -174,4 +174,32 @@ DMessage wait_for_new_message_from_dconnection(DConnection* conn) {
     __sync_lock_test_and_set(flag_ptr, 1);
  
     return msg;
+}
+
+void* get_pointer_for_new_message_dconnection(DConnection* conn, size_t msg_size) {
+    DConnectionHeader* conn_header = ((DConnectionHeader*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)));
+    unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_server : &conn_header->ready_flag_client;
+
+    while (!*flag_ptr || *flag_ptr == 2) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
+        _mm_pause();
+    }
+
+    __sync_lock_test_and_set(flag_ptr, 2); // lock writing for all other writers
+
+    *((size_t*)conn->shm_ptr) = msg_size;
+
+
+    return conn->shm_ptr+sizeof(size_t);
+}
+
+void publish_new_message_dconnection(DConnection* conn) {
+    DConnectionHeader* conn_header = ((DConnectionHeader*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)));
+    unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_server : &conn_header->ready_flag_client;
+
+    __sync_synchronize();
+    __sync_lock_test_and_set(flag_ptr, 0);
+    
+    if (conn->connection_type != SPINNING_CONNECTION) {
+        SetEvent(conn->hEvent);
+    }
 }
