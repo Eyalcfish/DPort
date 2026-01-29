@@ -5,12 +5,16 @@
 #include <windows.h>
 #endif
 
+#define EVENT_BASED_CONNECTION 0
+#define HYBRID_CONNECTION 1
+#define SPINNING_CONNECTION 2
+
 typedef struct DConnection {
     size_t shm_size;
     char identifier;
     char* port_name;
     void* shm_ptr;
-    char spinning_connection;
+    char connection_type;
     #ifdef _WIN32
     HANDLE hMapFile;
     HANDLE hEvent;
@@ -19,7 +23,7 @@ typedef struct DConnection {
 
 typedef struct __attribute__((packed)) DConnectionHeader {
     size_t shm_size;
-    char spinning_connection;
+    char connection_type;
     unsigned char ready_flag_server;
     unsigned char ready_flag_client;
 } DConnectionHeader;
@@ -30,7 +34,7 @@ typedef struct DMessage {
 } DMessage;
 
 /*Create a shared memory connection at id/port <port> and size <shm_size> at most */
-DConnection* create_dconnection(const char* port_name, size_t shm_size, char spinning_connection);
+DConnection* create_dconnection(const char* port_name, size_t shm_size, char connection_type);
 
 /*Connect to an existing shared memory connection at id/port <port> */
 DConnection* connect_dconnection(const char* port_name);

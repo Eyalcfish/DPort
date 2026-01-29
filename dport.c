@@ -15,12 +15,12 @@
 // } DMessage;
 
 /*Create a shared memory connection at id/port <port> and size <shm_size> */
-DConnection* create_dconnection(const char* port_name, size_t shm_size, char spinning_connection) {
+DConnection* create_dconnection(const char* port_name, size_t shm_size, char connection_type) {
     DConnection* conn = (DConnection*)malloc(sizeof(DConnection));
 
     conn->port_name = strdup(port_name);
     conn->shm_size = shm_size;
-    conn->spinning_connection = spinning_connection;
+    conn->connection_type = connection_type;
     shm_size += sizeof(DConnectionHeader);
 
     #ifdef _WIN32
@@ -54,7 +54,7 @@ DConnection* create_dconnection(const char* port_name, size_t shm_size, char spi
     conn->hEvent = CreateEvent(NULL, FALSE, FALSE, event_name);
     #endif
 
-    *((DConnectionHeader*)conn->shm_ptr) = (DConnectionHeader){.shm_size = conn->shm_size, .spinning_connection = conn->spinning_connection, .ready_flag_client = 1, .ready_flag_server = 1};
+    *((DConnectionHeader*)conn->shm_ptr) = (DConnectionHeader){.shm_size = conn->shm_size, .connection_type = conn->connection_type, .ready_flag_client = 1, .ready_flag_server = 1};
     conn->shm_ptr += sizeof(DConnectionHeader);
 
     conn->identifier = 1;
@@ -95,7 +95,7 @@ DConnection* connect_dconnection(const char* port_name) {
     #endif
     
     conn->shm_size = ((DConnectionHeader*)conn->shm_ptr)->shm_size;
-    conn->spinning_connection = ((DConnectionHeader*)conn->shm_ptr)->spinning_connection;
+    conn->connection_type = ((DConnectionHeader*)conn->shm_ptr)->connection_type;
     conn->shm_ptr += sizeof(DConnectionHeader);
 
     conn->identifier = 0;
@@ -123,7 +123,7 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
     
     
     while (!*flag_ptr) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
-        // _mm_pause();
+        _mm_pause();
     }
     
     *((size_t*)conn->shm_ptr) = msg->size;
@@ -132,7 +132,7 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
     __sync_synchronize();
     __sync_lock_test_and_set(flag_ptr, 0);
     
-    if (!conn->spinning_connection) {
+    if (!conn->connection_type) {
         SetEvent(conn->hEvent);
     }
     
@@ -146,13 +146,15 @@ DMessage wait_for_new_message_from_dconnection(DConnection* conn) {
     DConnectionHeader* conn_header = ((DConnectionHeader*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)));
     unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_client : &conn_header->ready_flag_server;
     
-    if (conn->spinning_connection) {
+    if (conn->connection_type == SPINNING_CONNECTION) {
         while (*flag_ptr) {
             _mm_pause();
         }
     } else {
-        for(int i = 0 ; i < 100000 && *flag_ptr; i++) {
-            _mm_pause();
+        if (conn->connection_type == HYBRID_CONNECTION) {
+            for(int i = 0 ; i < 100000 && *flag_ptr; i++) {
+                _mm_pause();
+            }
         }
         #ifdef _WIN32
         while (*flag_ptr) {

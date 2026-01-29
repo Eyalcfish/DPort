@@ -26,7 +26,10 @@ int main(int argc, char** argv) {
 
     if (strcmp(argv[1], "server") == 0) {
         printf("[SERVER] Initializing DPort (Integrity Mode)...\n");
-        DConnection* conn = create_dconnection("example_port", 1024, 1);
+        // DConnection* conn = create_dconnection("example_port", 1024, EVENT_BASED_CONNECTION);
+        DConnection* conn = create_dconnection("example_port", 1024, HYBRID_CONNECTION);
+        // DConnection* conn = create_dconnection("example_port", 1024, SPINNING_CONNECTION);
+
         int corruption_count = 0;
 
         // 1. LATENCY STAGE (Verification)
@@ -36,7 +39,7 @@ int main(int argc, char** argv) {
             if (*(long long*)msg.data != (long long)i) corruption_count++;
             
             write_to_dconnection(conn, &msg);
-            free(msg.data);
+            free(msg.data); 
         }
 
         // 2. THROUGHPUT STAGE (Flood Verification)
