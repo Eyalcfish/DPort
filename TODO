@@ -1,3 +1,5 @@
+implement round-buffer -> make custom allocation in the shm
+
 implement seperate thread queing
 
 check the dynamic hybrid cycles option
