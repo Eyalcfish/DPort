@@ -1,3 +1,5 @@
+make the ready flag 1 byte and not 2
+add zero copy option
 implement seperate thread queing
 add multiple clients communication
 check out everything is actually safe

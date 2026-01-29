@@ -3,7 +3,6 @@
 #include <windows.h>
 #include "dport.h"
 
-// --- High-Res Timer Implementation ---
 long long get_nanos() {
     static LARGE_INTEGER frequency;
     static int initialized = 0;
@@ -22,63 +21,89 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const int ITERATIONS = 1000000;
+    const int MSG_SIZE = sizeof(long long); // We'll send an 8-byte counter
+
     if (strcmp(argv[1], "server") == 0) {
-        // --- SERVER MODE ---
-        printf("[SERVER] Initializing DPort...\n");
+        printf("[SERVER] Initializing DPort (Integrity Mode)...\n");
         DConnection* conn = create_dconnection("example_port", 1024, 1);
+        int corruption_count = 0;
+
+        // 1. LATENCY STAGE (Verification)
+        for(int i = 0; i < (ITERATIONS + 10000); i++) {
+            DMessage msg = wait_for_new_message_from_dconnection(conn);
+            // Integrity Check
+            if (*(long long*)msg.data != (long long)i) corruption_count++;
+            
+            write_to_dconnection(conn, &msg);
+            free(msg.data);
+        }
+
+        // 2. THROUGHPUT STAGE (Flood Verification)
+        printf("[SERVER] Latency done. Verifying throughput flood...\n");
+        for(int i = 0; i < ITERATIONS; i++) {
+            DMessage msg = wait_for_new_message_from_dconnection(conn);
+            if (*(long long*)msg.data != (long long)i) {
+                corruption_count++;
+            }
+            free(msg.data);
+        }
         
-        // WARM-UP: Get the CPU out of power-saving mode
-        for(int i = 0; i < 10000; i++) {
-            DMessage msg = wait_for_new_message_from_dconnection(conn);
-            write_to_dconnection(conn, &msg);
-            free(msg.data);
-        }
+        DMessage ack = { .size = 4, .data = "OK" };
+        write_to_dconnection(conn, &ack);
 
-        printf("[SERVER] Ready. Waiting for 1,000,000 pings...\n");
-        for(int i = 0; i < 1000000; i++) {
-            // Wait for message from client
-            DMessage msg = wait_for_new_message_from_dconnection(conn);
-
-            // Immediately send it back (Ping-Pong)
-            write_to_dconnection(conn, &msg);
-            free(msg.data);
-        }
-        printf("[SERVER] Benchmark complete.\n");
+        printf("[SERVER] Integrity Results: %d errors found.\n", corruption_count);
         close_dconnection(conn);
         
     } else if (strcmp(argv[1], "client") == 0) {
-        // --- CLIENT MODE ---
         printf("[CLIENT] Connecting to DPort...\n");
         DConnection* conn = connect_dconnection("example_port");
         
-        DMessage msg;
-        char* data = "ping";
-        msg.size = strlen(data) + 1;
-        msg.data = data;
+        long long counter = 0;
+        DMessage msg = { .size = MSG_SIZE, .data = (char*)&counter };
+        int errors = 0;
+
+        printf("[CLIENT] Starting Integrity + Latency Test...\n");
         
-        printf("[CLIENT] Starting Benchmark (1,000,000 iterations)...\n");
-        
-        // WARM-UP: Get the CPU out of power-saving mode
+        // Warmup
         for(int i = 0; i < 10000; i++) {
+            counter = (long long)i;
             write_to_dconnection(conn, &msg);
-            wait_for_new_message_from_dconnection(conn);
+            DMessage r = wait_for_new_message_from_dconnection(conn);
+            free(r.data);
         }
         
-        long long start = get_nanos();
-        for(int i = 0; i < 1000000; i++) {
+        long long start_lat = get_nanos();
+        for(int i = 0; i < ITERATIONS; i++) {
+            counter = (long long)(i + 10000); // Sequence continues
             write_to_dconnection(conn, &msg);
+            
             DMessage response = wait_for_new_message_from_dconnection(conn);
+            if (*(long long*)response.data != counter) errors++;
             free(response.data);
         }
-        long long end = get_nanos();
+        long long end_lat = get_nanos();
 
-        printf("\n--- RESULTS ---\n");
-        printf("Total Time:    %lld ns\n", (end - start));
-        printf("Avg Round-Trip: %lld ns\n", (end - start) / 1000000);
-        printf("One-Way Latency: ~%lld ns\n", ((end - start) / 1000000) / 2);
+        printf("[CLIENT] Starting Throughput Flood...\n");
+        long long start_tp = get_nanos();
+        for(int i = 0; i < ITERATIONS; i++) {
+            counter = (long long)i; // Reset for flood test
+            write_to_dconnection(conn, &msg);
+        }
+        DMessage final_ack = wait_for_new_message_from_dconnection(conn);
+        long long end_tp = get_nanos();
+        free(final_ack.data);
+
+        // --- RESULTS ---
+        long long lat_total = end_lat - start_lat;
+        long long tp_total = end_tp - start_tp;
+        
+        printf("\n--- INTEGRITY RESULTS ---\n");
+        printf("Integrity Errors: %d\n", errors);
+        printf("Latency (RTT):    %lld ns\n", lat_total / ITERATIONS);
+        printf("Throughput:       %.2f M/s\n", (double)ITERATIONS / ((double)tp_total / 1e9) / 1e6);
         
         close_dconnection(conn);
     }
-
     return 0;
 }
