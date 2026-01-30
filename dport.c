@@ -8,16 +8,18 @@
 #include <errno.h>       // for errno, EWOULDBLOCK
 #include <string.h>      // for memcpy, strdup
 #include <stdint.h>      // for int32_t
+#include <fcntl.h>    // for shm_open, O_CREAT, O_RDWR
+#include <sys/mman.h>   // for mmap, PROT_READ, PROT_WRITE, MAP_SHARED
 #endif
 
-typedef struct __attribute__((packed)) DConnectionHeader {
+typedef struct DConnectionHeader {
     size_t shm_size;
     char connection_type;
     unsigned char ready_flag_server;
     unsigned char ready_flag_client;
     #ifdef _WIN32
     #elif __linux__
-    int futex_flag
+    int futex_flag;
     #endif
 } DConnectionHeader;
 

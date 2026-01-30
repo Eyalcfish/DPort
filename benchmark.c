@@ -1,18 +1,32 @@
 #include <stdio.h>
 #include <string.h>
-#include <windows.h>
+#include <stdlib.h> // for free, malloc
+
 #include "dport.h"
 
+#ifdef _WIN32
+    #include <windows.h>
+#elif __linux__
+    #include <time.h>
+#endif
+
 long long get_nanos() {
-    static LARGE_INTEGER frequency;
-    static int initialized = 0;
-    if (!initialized) {
-        QueryPerformanceFrequency(&frequency);
-        initialized = 1;
-    }
-    LARGE_INTEGER counter;
-    QueryPerformanceCounter(&counter);
-    return (long long)((counter.QuadPart * 1000000000LL) / frequency.QuadPart);
+    #ifdef _WIN32
+        static LARGE_INTEGER frequency;
+        static int initialized = 0;
+        if (!initialized) {
+            QueryPerformanceFrequency(&frequency);
+            initialized = 1;
+        }
+        LARGE_INTEGER counter;
+        QueryPerformanceCounter(&counter);
+        return (long long)((counter.QuadPart * 1000000000LL) / frequency.QuadPart);
+    #elif __linux__
+        struct timespec ts;
+        // CLOCK_MONOTONIC is best for benchmarking as it is not affected by system time jumps
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+    #endif
 }
 
 int main(int argc, char** argv) {
