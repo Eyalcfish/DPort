@@ -125,6 +125,8 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
     while (!*flag_ptr || *flag_ptr == 2) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
         _mm_pause();
     }
+
+    __sync_synchronize();
     
     *((size_t*)conn->shm_ptr) = msg->size;
     memcpy((char*)conn->shm_ptr+sizeof(size_t), msg->data, msg->size);
