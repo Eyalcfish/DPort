@@ -1,18 +1,25 @@
 #include "dport.h"
 #ifdef _WIN32
-#include <windows.h>
+#elif __linux__
+#include <immintrin.h>    // for _mm_pause()
+#include <unistd.h>      // for syscall, close, ftruncate
+#include <sys/syscall.h> // for SYS_futex
+#include <linux/futex.h> // for FUTEX_WAIT, FUTEX_WAKE
+#include <errno.h>       // for errno, EWOULDBLOCK
+#include <string.h>      // for memcpy, strdup
+#include <stdint.h>      // for int32_t
 #endif
 
-// typedef struct DConnection {
-//     size_t shm_size;
-//     char* port_name;
-//     void* shm_ptr;
-// } DConnection;
-
-// typedef struct DMessage {
-//     size_t size;
-//     void* data;
-// } DMessage;
+typedef struct __attribute__((packed)) DConnectionHeader {
+    size_t shm_size;
+    char connection_type;
+    unsigned char ready_flag_server;
+    unsigned char ready_flag_client;
+    #ifdef _WIN32
+    #elif __linux__
+    int futex_flag
+    #endif
+} DConnectionHeader;
 
 /*Create a shared memory connection at id/port <port> and size <shm_size> */
 DConnection* create_dconnection(const char* port_name, size_t shm_size, char connection_type) {
@@ -52,9 +59,22 @@ DConnection* create_dconnection(const char* port_name, size_t shm_size, char con
     snprintf(event_name, sizeof(event_name), "%s_event", port_name);
 
     conn->hEvent = CreateEvent(NULL, FALSE, FALSE, event_name);
+    #elif __linux__
+
+    int shm_fd = shm_open(port_name, O_CREAT | O_RDWR, 0666);
+
+    ftruncate(shm_fd, shm_size);
+
+    conn->shm_ptr = mmap(0, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+
     #endif
 
+    #ifdef __linux__
+    *((DConnectionHeader*)conn->shm_ptr) = (DConnectionHeader){.shm_size = conn->shm_size, .connection_type = conn->connection_type, .ready_flag_client = 1, .ready_flag_server = 1, .futex_flag = 0}; 
+    conn->futex_flag = &((DConnectionHeader*)conn->shm_ptr)->futex_flag;
+    #else
     *((DConnectionHeader*)conn->shm_ptr) = (DConnectionHeader){.shm_size = conn->shm_size, .connection_type = conn->connection_type, .ready_flag_client = 1, .ready_flag_server = 1};
+    #endif
     conn->shm_ptr += sizeof(DConnectionHeader);
 
     conn->identifier = 1;
@@ -92,6 +112,20 @@ DConnection* connect_dconnection(const char* port_name) {
     
     conn->hEvent = OpenEvent(EVENT_ALL_ACCESS, FALSE, event_name);
     
+
+    #elif __linux__
+
+    int shm_fd = shm_open(port_name, O_RDWR, 0666);
+
+    conn->shm_ptr = ((DConnectionHeader*)mmap(0, sizeof(DConnectionHeader), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0));
+
+    size_t shm_size = ((DConnectionHeader*)conn->shm_ptr)->shm_size + sizeof(DConnectionHeader);
+
+    munmap((void*)((DConnectionHeader*)conn->shm_ptr), sizeof(DConnectionHeader));
+
+    conn->shm_ptr = mmap(0, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    conn->futex_flag = &((DConnectionHeader*)conn->shm_ptr)->futex_flag;
+
     #endif
     
     conn->shm_size = ((DConnectionHeader*)conn->shm_ptr)->shm_size;
@@ -108,6 +142,11 @@ void close_dconnection(DConnection* conn) {
     #ifdef _WIN32
     UnmapViewOfFile((char*)conn->shm_ptr - sizeof(DConnectionHeader));
     CloseHandle(conn->hMapFile);
+    #elif __linux__
+    munmap((void*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)), conn->shm_size + sizeof(DConnectionHeader));
+    if (conn->identifier == 1) {
+        shm_unlink(conn->port_name);
+    }
     #endif
 }
 
@@ -122,7 +161,7 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
     unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_server : &conn_header->ready_flag_client;
     
     
-    while (!*flag_ptr || *flag_ptr == 2) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
+    while (!*flag_ptr) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
         _mm_pause();
     }
 
@@ -135,11 +174,14 @@ void write_to_dconnection(DConnection* conn, DMessage* msg) {
     __sync_lock_test_and_set(flag_ptr, 0);
     
     if (!conn->connection_type) {
+        #ifdef _WIN32
         SetEvent(conn->hEvent);
+        #elif __linux__
+        __sync_fetch_and_add(conn->futex_flag, 1);
+        syscall(SYS_futex, conn->futex_flag, FUTEX_WAKE, 1, NULL, NULL, 0);
+        #endif
     }
     
-    #ifdef _WIN32
-    #endif
 }
 
 /*Read data from the shared memory connection */
@@ -163,6 +205,15 @@ DMessage wait_for_new_message_from_dconnection(DConnection* conn) {
             // Use a timeout (e.g. 10ms) to "self-heal" if a signal is missed
             WaitForSingleObject(conn->hEvent, 1);
         }
+        #elif __linux__
+        int expected = *conn->futex_flag;
+        while (*flag_ptr) {
+            int ret = syscall(SYS_futex, conn->futex_flag, FUTEX_WAIT, expected, NULL, NULL, 0);
+        
+            if (ret == -1 && errno == EWOULDBLOCK) {
+                expected = *conn->futex_flag;
+            }
+        }
         #endif
     }
 
@@ -176,32 +227,4 @@ DMessage wait_for_new_message_from_dconnection(DConnection* conn) {
     __sync_lock_test_and_set(flag_ptr, 1);
  
     return msg;
-}
-
-void* get_pointer_for_new_message_dconnection(DConnection* conn, size_t msg_size) {
-    DConnectionHeader* conn_header = ((DConnectionHeader*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)));
-    unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_server : &conn_header->ready_flag_client;
-
-    while (!*flag_ptr || *flag_ptr == 2) { // FOR NOW UNTILL SEPERATE THREAD QUEING IS IMPLEMENTED
-        _mm_pause();
-    }
-
-    __sync_lock_test_and_set(flag_ptr, 2); // lock writing for all other writers
-
-    *((size_t*)conn->shm_ptr) = msg_size;
-
-
-    return conn->shm_ptr+sizeof(size_t);
-}
-
-void publish_new_message_dconnection(DConnection* conn) {
-    DConnectionHeader* conn_header = ((DConnectionHeader*)((char*)conn->shm_ptr - sizeof(DConnectionHeader)));
-    unsigned char* flag_ptr = (conn->identifier == 0) ? &conn_header->ready_flag_server : &conn_header->ready_flag_client;
-
-    __sync_synchronize();
-    __sync_lock_test_and_set(flag_ptr, 0);
-    
-    if (conn->connection_type != SPINNING_CONNECTION) {
-        SetEvent(conn->hEvent);
-    }
 }

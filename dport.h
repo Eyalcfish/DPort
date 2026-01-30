@@ -1,6 +1,7 @@
 #ifndef DPORT_H
 #define DPORT_H
 #include <stdio.h>
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -18,15 +19,10 @@ typedef struct DConnection {
     #ifdef _WIN32
     HANDLE hMapFile;
     HANDLE hEvent;
+    #elif __linux__
+    int* futex_flag;
     #endif
 } DConnection;
-
-typedef struct __attribute__((packed)) DConnectionHeader {
-    size_t shm_size;
-    char connection_type;
-    unsigned char ready_flag_server;
-    unsigned char ready_flag_client;
-} DConnectionHeader;
 
 typedef struct DMessage {
     size_t size;
@@ -47,9 +43,5 @@ void write_to_dconnection(DConnection* conn, DMessage* msg);
 
 /*Read data from the shared memory connection */
 DMessage wait_for_new_message_from_dconnection(DConnection* conn);
-
-void* get_pointer_for_new_message_dconnection(DConnection* conn, size_t msg_size);
-
-void publish_new_message_dconnection(DConnection* conn);
 
 #endif

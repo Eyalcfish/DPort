@@ -27,8 +27,8 @@ int main(int argc, char** argv) {
     if (strcmp(argv[1], "server") == 0) {
         printf("[SERVER] Initializing DPort (Integrity Mode)...\n");
         // DConnection* conn = create_dconnection("example_port", 1024, EVENT_BASED_CONNECTION);
-        DConnection* conn = create_dconnection("example_port", 1024, HYBRID_CONNECTION);
-        // DConnection* conn = create_dconnection("example_port", 1024, SPINNING_CONNECTION);
+        // DConnection* conn = create_dconnection("example_port", 1024, HYBRID_CONNECTION);
+        DConnection* conn = create_dconnection("example_port", 1024, SPINNING_CONNECTION);
 
         int corruption_count = 0;
 
