@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	dport "github.com/Eyalcfish/DPort/src/dport"
+	"github.com/Eyalcfish/DPort/src/dport/queue"
 )
 
 func BenchmarkRoundTrip(b *testing.B) {
@@ -108,4 +109,64 @@ func BenchmarkThroughput(b *testing.B) {
 			<-done
 		})
 	}
+}
+
+func BenchmarkWorkers(b *testing.B) {
+	const port = "bench_workers"
+	payload := []byte("bench-payload!") // 14 bytes
+
+	srv, err := dport.Create(port, 1024)
+	if err != nil {
+		b.Fatalf("Create: %v", err)
+	}
+
+	cli, err := dport.Connect(port)
+	if err != nil {
+		srv.Close()
+		b.Fatalf("Connect: %v", err)
+	}
+
+	head := &queue.Package{}
+	n := b.N
+
+	// Reader goroutine: reads exactly n messages into the queue.
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		tail := head
+		for i := 0; i < n; i++ {
+			msg := srv.Read()
+			tail = queue.WriteToPackage(tail, &msg)
+		}
+	}()
+
+	// Writer goroutine: sends exactly n messages.
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		for i := 0; i < n; i++ {
+			cli.Write(&dport.DMessage{Size: uintptr(len(payload)), Data: payload})
+		}
+	}()
+
+	b.SetBytes(int64(len(payload)))
+	b.ResetTimer()
+
+	// Drain n messages from the queue.
+	cur := head
+	for i := 0; i < n; i++ {
+		var ok bool
+		for {
+			_, cur, ok = queue.ReadFromPackage(cur)
+			if ok {
+				break
+			}
+		}
+	}
+
+	b.StopTimer()
+	<-readerDone
+	<-writerDone
+	cli.Close()
+	srv.Close()
 }

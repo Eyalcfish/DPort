@@ -7,7 +7,71 @@ import (
 	"testing"
 
 	dport "github.com/Eyalcfish/DPort/src/dport"
+	"github.com/Eyalcfish/DPort/src/dport/queue"
 )
+
+func TestWorkers(t *testing.T) {
+	const port = "test_workers"
+	const n = 10
+
+	srv, err := dport.Create(port, 1024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	cli, err := dport.Connect(port)
+	if err != nil {
+		srv.Close()
+		t.Fatalf("Connect: %v", err)
+	}
+
+	// Reader goroutine: reads exactly n messages from the DPort connection
+	// and writes them into the queue.
+	head := &queue.Package{}
+	readerDone := make(chan struct{})
+
+	go func() {
+		defer close(readerDone)
+		tail := head
+		for i := 0; i < n; i++ {
+			msg := srv.Read()
+			tail = queue.WriteToPackage(tail, &msg)
+		}
+	}()
+
+	// Writer goroutine: sends exactly n messages through the DPort connection.
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		for i := 0; i < n; i++ {
+			data := []byte(fmt.Sprintf("msg-%04d", i))
+			cli.Write(&dport.DMessage{Size: uintptr(len(data)), Data: data})
+		}
+	}()
+
+	// Main goroutine: read n messages from the queue.
+	cur := head
+	for i := 0; i < n; i++ {
+		var msg dport.DMessage
+		var ok bool
+		for {
+			msg, cur, ok = queue.ReadFromPackage(cur)
+			if ok {
+				break
+			}
+		}
+		want := fmt.Sprintf("msg-%04d", i)
+		if string(msg.Data) != want {
+			t.Fatalf("message %d: got %q, want %q", i, msg.Data, want)
+		}
+	}
+
+	// Wait for both goroutines to finish before closing connections.
+	<-readerDone
+	<-writerDone
+	cli.Close()
+	srv.Close()
+}
 
 func TestCreateAndConnect(t *testing.T) {
 	const port = "test_create_connect"
