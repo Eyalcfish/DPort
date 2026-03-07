@@ -2,3 +2,4 @@ server.exe
 client.exe
 benchmark.exe
 benchmark_logs/*
+bin/*
