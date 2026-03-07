@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	dport "github.com/Eyalcfish/DPort/src/dport"
+	"github.com/Eyalcfish/DPort/src/dport/queue"
 )
 
 func main() {
@@ -13,8 +14,17 @@ func main() {
 	}
 	defer conn.Close()
 
+	killSwitch := uint8(0)
+	readQueue, _ := queue.StartWorkers(conn, &killSwitch)
+
+	var msg dport.DMessage
+	var ok bool
 	for i := 0; i < 10; i++ {
-		msg := conn.Read()
+		msg, readQueue, ok = queue.ReadFromPackage(readQueue)
+		if !ok {
+			i--
+			continue
+		}
 		fmt.Printf("Size: %d | Data: %s\n", msg.Size, msg.Data)
 	}
 }
