@@ -3,12 +3,6 @@ package main
 /*
 #include <stdint.h>
 #include <stdlib.h>
-
-// DPortMessage is the C-compatible message structure.
-typedef struct {
-	uint64_t size;
-	void*    data;
-} DPortMessage;
 */
 import "C"
 import (
@@ -103,40 +97,30 @@ func DPort_Write(handle C.int, data unsafe.Pointer, size C.uint64_t) C.int {
 	return 0
 }
 
-// DPort_Read reads a message from a DPort connection.
-// The caller must free the returned data pointer with DPort_FreeMessage.
-// Returns a DPortMessage with size=0 and data=NULL on failure.
+// DPort_Read reads a message into a caller-provided buffer.
+// Returns the message size (bytes written to buf), or -1 on error.
+// If the message is larger than bufSize, it is truncated.
 //
 //export DPort_Read
-func DPort_Read(handle C.int) C.DPortMessage {
+func DPort_Read(handle C.int, buf unsafe.Pointer, bufSize C.uint64_t) C.longlong {
 	conn := getConn(handle)
 	if conn == nil {
-		return C.DPortMessage{size: 0, data: nil}
+		return -1
 	}
 
 	msg := conn.Read()
 
-	// Allocate C memory and copy the data into it.
-	// The caller is responsible for freeing this with DPort_FreeMessage.
-	cData := C.malloc(C.size_t(msg.Size))
+	n := msg.Size
+	if n > uintptr(bufSize) {
+		n = uintptr(bufSize)
+	}
+
 	copy(
-		unsafe.Slice((*byte)(cData), msg.Size),
-		msg.Data,
+		unsafe.Slice((*byte)(buf), n),
+		msg.Data[:n],
 	)
 
-	return C.DPortMessage{
-		size: C.uint64_t(msg.Size),
-		data: cData,
-	}
-}
-
-// DPort_FreeMessage frees the data pointer from a DPortMessage returned by DPort_Read.
-//
-//export DPort_FreeMessage
-func DPort_FreeMessage(msg C.DPortMessage) {
-	if msg.data != nil {
-		C.free(msg.data)
-	}
+	return C.longlong(msg.Size)
 }
 
 // DPort_ShmSize returns the shared memory size for a connection.
