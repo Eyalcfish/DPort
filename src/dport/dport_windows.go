@@ -14,7 +14,7 @@ const headerFutexSize = 0
 const fileMapAllAccess = windows.FILE_MAP_WRITE | windows.FILE_MAP_READ
 
 var (
-	modkernel32        = syscall.NewLazyDLL("kernel32.dll")
+	modkernel32         = syscall.NewLazyDLL("kernel32.dll")
 	procOpenFileMapping = modkernel32.NewProc("OpenFileMappingW")
 )
 
@@ -57,7 +57,7 @@ func openShm(name string) (unsafe.Pointer, platformHandle, error) {
 
 	r0, _, e1 := procOpenFileMapping.Call(
 		uintptr(fileMapAllAccess),
-		0, // bInheritHandle = FALSE
+		0,
 		uintptr(unsafe.Pointer(namePtr)),
 	)
 	if r0 == 0 {

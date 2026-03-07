@@ -2,7 +2,6 @@ package dport
 
 import (
 	"errors"
-	"runtime"
 	"sync/atomic"
 	"unsafe"
 )
@@ -39,6 +38,9 @@ type DConnection struct {
 	handle         platformHandle
 }
 
+func (c *DConnection) ShmSize() uintptr     { return c.shmSize }
+func (c *DConnection) ConnectionType() byte { return c.connectionType }
+
 func Create(portName string, shmSize uintptr) (*DConnection, error) {
 	totalSize := shmSize + uintptr(headerSize)
 
@@ -58,7 +60,6 @@ func Create(portName string, shmSize uintptr) (*DConnection, error) {
 
 	*(*uintptr)(basePtr) = shmSize
 	*(*byte)(unsafe.Add(basePtr, offConnType)) = conn.connectionType
-	// Initialize flags via atomic CAS to avoid byte-level store ambiguity.
 	atomicStoreByte(basePtr, offServerFlag, 1)
 	atomicStoreByte(basePtr, offClientFlag, 1)
 
@@ -93,7 +94,6 @@ func (c *DConnection) Write(msg *DMessage) error {
 		return errors.New("dport: message size exceeds shared memory capacity")
 	}
 
-	// Client waits on server flag; server waits on client flag.
 	flagOff := offServerFlag
 	if c.identifier == 1 {
 		flagOff = offClientFlag
@@ -112,7 +112,6 @@ func (c *DConnection) Write(msg *DMessage) error {
 }
 
 func (c *DConnection) Read() DMessage {
-	// Server waits on server flag; client waits on client flag.
 	flagOff := offClientFlag
 	if c.identifier == 1 {
 		flagOff = offServerFlag
@@ -132,7 +131,6 @@ func (c *DConnection) Read() DMessage {
 	return DMessage{Size: size, Data: data}
 }
 
-// spinWaitByte busy-waits until the byte at basePtr+flagOff equals target.
 func spinWaitByte(basePtr unsafe.Pointer, flagOff uintptr, target byte) {
 	aligned := (*uint32)(unsafe.Add(basePtr, flagOff & ^uintptr(3)))
 	shift := uint((flagOff & 3) * 8)
@@ -143,14 +141,12 @@ func spinWaitByte(basePtr unsafe.Pointer, flagOff uintptr, target byte) {
 		if atomic.LoadUint32(aligned)&mask == want {
 			return
 		}
-		if i&0x3F == 0 {
-			runtime.Gosched()
-		}
+		// if i&0x3F == 0 { // TODO: choose whatever todo with this
+		// 	runtime.Gosched()
+		// }
 	}
 }
 
-// atomicStoreByte sets a single byte within a 4-byte-aligned uint32 via CAS,
-// without clobbering adjacent bytes.
 func atomicStoreByte(basePtr unsafe.Pointer, flagOff uintptr, val byte) {
 	aligned := (*uint32)(unsafe.Add(basePtr, flagOff & ^uintptr(3)))
 	shift := uint((flagOff & 3) * 8)
