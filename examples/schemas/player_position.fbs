@@ -1,0 +1,9 @@
+namespace example;
+
+table PlayerPosition {
+  x: float;
+  y: float;
+  z: float;
+}
+
+root_type PlayerPosition;

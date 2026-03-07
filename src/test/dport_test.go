@@ -8,6 +8,10 @@ import (
 
 	dport "github.com/Eyalcfish/DPort/src/dport"
 	"github.com/Eyalcfish/DPort/src/dport/queue"
+
+	flatbuffers "github.com/google/flatbuffers/go"
+
+	"github.com/Eyalcfish/DPort/examples/schemas/example"
 )
 
 func TestWorkers(t *testing.T) {
@@ -218,5 +222,95 @@ func TestWriteTooLarge(t *testing.T) {
 	err = cli.Write(&dport.DMessage{Size: uintptr(len(big)), Data: big})
 	if err == nil {
 		t.Fatal("expected error for oversized message")
+	}
+}
+
+func TestTypedMessage(t *testing.T) {
+	const port = "test_typed_msg"
+	const MsgPlayerPosition uint16 = 1
+
+	srv, err := dport.Create(port, 1024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	cli, err := dport.Connect(port)
+	if err != nil {
+		srv.Close()
+		t.Fatalf("Connect: %v", err)
+	}
+
+	tcSrv := dport.NewTypedConnection(srv)
+	tcCli := dport.NewTypedConnection(cli)
+
+	tcSrv.Register(MsgPlayerPosition, "PlayerPosition", 12)
+	tcCli.Register(MsgPlayerPosition, "PlayerPosition", 12)
+
+	// Client sends a PlayerPosition in a goroutine
+	sendDone := make(chan struct{})
+	go func() {
+		defer close(sendDone)
+		builder := flatbuffers.NewBuilder(64)
+		example.PlayerPositionStart(builder)
+		example.PlayerPositionAddX(builder, 1.5)
+		example.PlayerPositionAddY(builder, 2.5)
+		example.PlayerPositionAddZ(builder, 3.5)
+		off := example.PlayerPositionEnd(builder)
+		builder.Finish(off)
+
+		if err := tcCli.WriteTyped(MsgPlayerPosition, builder.FinishedBytes()); err != nil {
+			t.Errorf("WriteTyped: %v", err)
+		}
+	}()
+
+	// Server receives and decodes it
+	msg, err := tcSrv.ReadTyped()
+	if err != nil {
+		t.Fatalf("ReadTyped: %v", err)
+	}
+
+	<-sendDone
+
+	if msg.ID != MsgPlayerPosition {
+		t.Fatalf("ID = %d, want %d", msg.ID, MsgPlayerPosition)
+	}
+
+	pos := example.GetRootAsPlayerPosition(msg.Payload, 0)
+	if pos.X() != 1.5 || pos.Y() != 2.5 || pos.Z() != 3.5 {
+		t.Fatalf("got (%.1f, %.1f, %.1f), want (1.5, 2.5, 3.5)", pos.X(), pos.Y(), pos.Z())
+	}
+
+	tcCli.Close()
+	tcSrv.Close()
+}
+
+func TestTypedValidation(t *testing.T) {
+	const port = "test_typed_val"
+	const MsgRegistered uint16 = 1
+	const MsgUnregistered uint16 = 99
+
+	srv, err := dport.Create(port, 1024)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	defer srv.Close()
+
+	cli, err := dport.Connect(port)
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer cli.Close()
+
+	tcCli := dport.NewTypedConnection(cli)
+	tcCli.Register(MsgRegistered, "Registered", 8)
+
+	// Writing an unregistered ID should fail
+	if err := tcCli.WriteTyped(MsgUnregistered, []byte("test")); err == nil {
+		t.Fatal("expected error for unregistered message ID")
+	}
+
+	// Duplicate registration should fail
+	if err := tcCli.Register(MsgRegistered, "Duplicate", 4); err == nil {
+		t.Fatal("expected error for duplicate registration")
 	}
 }
