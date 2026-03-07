@@ -1,0 +1,50 @@
+name: Build DPort Libraries
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: bash all.bash
+            artifact_name: linux-so
+            file_ext: so
+          - os: windows-latest
+            script: .\all.bat
+            artifact_name: windows-dll
+            file_ext: dll
+          - os: macos-latest
+            script: bash all.command
+            artifact_name: macos-dylib
+            file_ext: dylib
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.x' # Update as needed
+
+    # Note: On Ubuntu, we need a C compiler (gcc) for CGo. It's usually installed by default, 
+    # but Windows and macOS runners also have their respective C compilers pre-installed.
+
+    - name: Build and Test
+      run: ${{ matrix.script }}
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: |
+          bin/dport.${{ matrix.file_ext }}
+          bin/dport.h
