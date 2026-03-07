@@ -29,6 +29,15 @@ func StartWorkers(conn *dport.DConnection, killSwitch *uint8) (readQueue *Packag
 	return readQueue, writeQueue
 }
 
+func WriteWithWorker(queue *Package, msg *dport.DMessage) *Package {
+	a := &dport.DMessage{
+		Data: make([]byte, msg.Size),
+		Size: msg.Size,
+	}
+	copy(a.Data, msg.Data)
+	return WriteToPackage(queue, a)
+}
+
 func WriteToPackage(queue *Package, msg *dport.DMessage) *Package {
 	queue.Msg = *msg
 	queue.Next = &Package{
@@ -72,4 +81,3 @@ func writeWorker(conn *dport.DConnection, queue *Package, killSwitch *uint8) {
 		conn.Write(&msg)
 	}
 }
-

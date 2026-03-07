@@ -22,7 +22,10 @@ func main() {
 		buf[2] = '0' + byte(i%10)
 		msg := &dport.DMessage{Size: uintptr(len(buf)), Data: buf}
 		fmt.Printf("Sending message: %s\n", buf)
-		writeQueue = queue.WriteToPackage(writeQueue, msg)
+		writeQueue = queue.WriteWithWorker(writeQueue, msg)
 	}
-	killSwitch = 1
+	// killSwitch = 1
+	for {
+		// wait for goroutines to do thier job
+	}
 }

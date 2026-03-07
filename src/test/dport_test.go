@@ -12,7 +12,7 @@ import (
 
 func TestWorkers(t *testing.T) {
 	const port = "test_workers"
-	const n = 10
+	const n = 1000
 
 	srv, err := dport.Create(port, 1024)
 	if err != nil {
