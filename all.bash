@@ -3,3 +3,8 @@ set -e
 bash test.bash
 echo ""
 bash benchmark.bash
+echo ""
+echo "=== Building CGo shared library ==="
+mkdir -p bin
+go build -buildmode=c-shared -o bin/dport.so ./src/cgo/
+echo "Built bin/dport.so and bin/dport.h"
