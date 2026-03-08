@@ -42,12 +42,18 @@ func shmOpen(name string, oflag int, mode int) (int, error) {
 func shmUnlink(name string) {
 	nameBytes, err := unix.BytePtrFromString(name)
 	if err != nil {
+		fmt.Printf("Error string %s: %v\n", name, err)
 		return
 	}
-	unix.Syscall(sysShmUnlink,
+	_, _, errno := unix.Syscall(sysShmUnlink,
 		uintptr(unsafe.Pointer(nameBytes)),
 		0, 0,
 	)
+	if errno != 0 {
+		fmt.Printf("Error unlinking %s: errno %d\n", name, errno)
+	} else {
+		fmt.Printf("Successfully unlinked %s\n", name)
+	}
 }
 
 func createShm(name string, totalSize uintptr) (unsafe.Pointer, platformHandle, error) {
