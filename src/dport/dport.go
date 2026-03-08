@@ -42,6 +42,7 @@ func (c *DConnection) ShmSize() uintptr     { return c.shmSize }
 func (c *DConnection) ConnectionType() byte { return c.connectionType }
 
 func Create(portName string, shmSize uintptr) (*DConnection, error) {
+
 	totalSize := shmSize + uintptr(headerSize)
 
 	basePtr, handle, err := createShm(portName, totalSize)

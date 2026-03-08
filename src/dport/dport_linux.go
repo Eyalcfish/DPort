@@ -4,6 +4,7 @@ package dport
 
 import (
 	"fmt"
+	"os"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -16,6 +17,8 @@ type platformHandle struct {
 }
 
 func createShm(name string, totalSize uintptr) (unsafe.Pointer, platformHandle, error) {
+	os.Remove("/dev/shm/" + name)
+
 	fd, err := shmOpen(name, unix.O_CREAT|unix.O_RDWR, 0666)
 	if err != nil {
 		return nil, platformHandle{}, fmt.Errorf("shm_open: %w", err)

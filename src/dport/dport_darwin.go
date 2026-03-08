@@ -52,6 +52,9 @@ func shmUnlink(name string) {
 
 func createShm(name string, totalSize uintptr) (unsafe.Pointer, platformHandle, error) {
 	shmName := "/" + name
+
+	shmUnlink(shmName)
+
 	fd, err := shmOpen(shmName, unix.O_CREAT|unix.O_RDWR, 0666)
 	if err != nil {
 		return nil, platformHandle{}, fmt.Errorf("shm_open: %w", err)
