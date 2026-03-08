@@ -90,6 +90,10 @@ func (c *DConnection) Close() {
 	closeShm(c.basePtr, c.shmSize+uintptr(headerSize), c.handle, c.identifier == 1)
 }
 
+func (c *DConnection) WriteBytes(bytes []byte) error {
+	return c.Write(&DMessage{Data: bytes, Size: uintptr(len(bytes))})
+}
+
 func (c *DConnection) Write(msg *DMessage) error {
 	if msg.Size > c.shmSize {
 		return errors.New("dport: message size exceeds shared memory capacity")
