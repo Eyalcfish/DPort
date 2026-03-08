@@ -59,20 +59,48 @@ func shmUnlink(name string) {
 func createShm(name string, totalSize uintptr) (unsafe.Pointer, platformHandle, error) {
 	shmName := "/" + name
 
+	// Attempt to open/create the shared memory
 	fd, err := shmOpen(shmName, unix.O_CREAT|unix.O_RDWR, 0666)
 	if err != nil {
 		return nil, platformHandle{}, fmt.Errorf("shm_open: %w", err)
 	}
-	defer unix.Close(fd)
 
+	// [macOS Stale Memory Recovery]
+	// If a previous server crashed, a zombie shared memory segment might exist.
+	// Calling ftruncate on a zombie segment on macOS fails with EINVAL (invalid argument).
+	// If we detect this specific failure, we know the segment is corrupt/stale.
+	// We must close it, unlink it to destroy the zombie, and try creating it again!
 	if err := unix.Ftruncate(fd, int64(totalSize)); err != nil {
-		return nil, platformHandle{}, fmt.Errorf("ftruncate: %w", err)
+		unix.Close(fd)
+		if err == unix.EINVAL {
+			// Zombie detected! Kill it and retry.
+			fmt.Printf("Stale shared memory detected for %s. Unlinking and retrying...\n", shmName)
+			shmUnlink(shmName)
+
+			// Retry creation
+			fd, err = shmOpen(shmName, unix.O_CREAT|unix.O_RDWR, 0666)
+			if err != nil {
+				return nil, platformHandle{}, fmt.Errorf("shm_open (retry): %w", err)
+			}
+
+			// Retry ftruncate
+			if err := unix.Ftruncate(fd, int64(totalSize)); err != nil {
+				unix.Close(fd)
+				return nil, platformHandle{}, fmt.Errorf("ftruncate (retry): %w", err)
+			}
+		} else {
+			return nil, platformHandle{}, fmt.Errorf("ftruncate: %w", err)
+		}
 	}
 
 	b, err := unix.Mmap(fd, 0, int(totalSize), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	if err != nil {
+		unix.Close(fd)
 		return nil, platformHandle{}, fmt.Errorf("mmap: %w", err)
 	}
+
+	// We can close the FD after mmap on POSIX
+	unix.Close(fd)
 
 	return unsafe.Pointer(&b[0]), platformHandle{mmapSlice: b, shmName: shmName}, nil
 }
