@@ -75,7 +75,7 @@ func BenchmarkPingPong(b *testing.B) {
 }
 
 func BenchmarkThroughput(b *testing.B) {
-	for _, size := range []int{64, 256, 1024, 4096} {
+	for _, size := range []int{64, 256, 1024, 4096, 100000, 1000000} {
 		b.Run(fmt.Sprintf("%dB", size), func(b *testing.B) {
 			port := fmt.Sprintf("bench_tp_%d", size)
 			srv, err := dport.Create(port, uintptr(size+64))
@@ -129,7 +129,6 @@ func BenchmarkWorkers(b *testing.B) {
 	head := &queue.Package{}
 	n := b.N
 
-	// Reader goroutine: reads exactly n messages into the queue.
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
@@ -140,7 +139,6 @@ func BenchmarkWorkers(b *testing.B) {
 		}
 	}()
 
-	// Writer goroutine: sends exactly n messages.
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
@@ -152,7 +150,6 @@ func BenchmarkWorkers(b *testing.B) {
 	b.SetBytes(int64(len(payload)))
 	b.ResetTimer()
 
-	// Drain n messages from the queue.
 	cur := head
 	for i := 0; i < n; i++ {
 		var ok bool

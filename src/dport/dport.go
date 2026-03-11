@@ -19,8 +19,6 @@ const (
 	offClientFlag = sizeOfSizeT + 2
 )
 
-// offFlagsAligned is the 4-byte-aligned offset containing connType + both flags.
-// sizeOfSizeT is always a multiple of 4, so this is always 4-byte aligned.
 const offFlagsAligned = sizeOfSizeT
 
 type DMessage struct {

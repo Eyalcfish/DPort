@@ -9,5 +9,5 @@ set LOG_FILE=benchmark_logs\bench_%mydate%_%mytime%.log
 set LOG_FILE=%LOG_FILE: =_%
 
 echo Saving results to "%LOG_FILE%"...
-go test -run=xxx -bench=Benchmark -benchmem .\src\benchmark\ > "%LOG_FILE%"
+go test -run=xxx -bench=Benchmark -benchmem .\benchmark\ > "%LOG_FILE%"
 type "%LOG_FILE%"

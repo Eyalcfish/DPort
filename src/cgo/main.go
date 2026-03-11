@@ -12,11 +12,8 @@ import (
 	dport "github.com/Eyalcfish/DPort/src/dport"
 )
 
-// handleMu protects the handles map.
 var handleMu sync.Mutex
 
-// handles maps integer handles to Go DConnection pointers.
-// We can't pass Go pointers to C, so we use integer handles instead.
 var handles = make(map[C.int]*dport.DConnection)
 var nextHandle C.int = 1
 

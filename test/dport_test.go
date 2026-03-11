@@ -25,8 +25,6 @@ func TestWorkers(t *testing.T) {
 		t.Fatalf("Connect: %v", err)
 	}
 
-	// Reader goroutine: reads exactly n messages from the DPort connection
-	// and writes them into the queue.
 	head := &queue.Package{}
 	readerDone := make(chan struct{})
 
@@ -39,7 +37,6 @@ func TestWorkers(t *testing.T) {
 		}
 	}()
 
-	// Writer goroutine: sends exactly n messages through the DPort connection.
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
