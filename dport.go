@@ -2,6 +2,7 @@ package dport
 
 import (
 	"errors"
+	"runtime"
 	"sync/atomic"
 	"unsafe"
 )
@@ -144,9 +145,9 @@ func spinWaitByte(basePtr unsafe.Pointer, flagOff uintptr, target byte) {
 		if atomic.LoadUint32(aligned)&mask == want {
 			return
 		}
-		// if i&0x3F == 0 { // TODO: choose whatever todo with this
-		// 	runtime.Gosched()
-		// }
+		if i&0x3F == 0 { // TODO: choose whatever todo with this
+			runtime.Gosched()
+		}
 	}
 }
 
