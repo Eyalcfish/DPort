@@ -6,5 +6,5 @@ bash benchmark.bash
 echo ""
 echo "Building CGo shared library"
 mkdir -p bin
-go build -buildmode=c-shared -o bin/dport.so ./src/cgo/
+go build -buildmode=c-shared -o bin/dport.so ./cgo/
 echo "Built bin/dport.so and bin/dport.h"

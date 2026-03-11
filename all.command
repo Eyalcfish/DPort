@@ -13,5 +13,5 @@ bash benchmark.bash
 echo ""
 echo "Building CGo shared library for macOS"
 mkdir -p bin
-CGO_ENABLED=1 go build -buildmode=c-shared -o bin/dport.dylib ./src/cgo/
+CGO_ENABLED=1 go build -buildmode=c-shared -o bin/dport.dylib ./cgo/
 echo "Built bin/dport.dylib and bin/dport.h"
