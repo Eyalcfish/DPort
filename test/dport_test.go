@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	dport "github.com/Eyalcfish/DPort/src/dport"
-	"github.com/Eyalcfish/DPort/src/dport/queue"
+	dport "github.com/Eyalcfish/DPort"
+	queue "github.com/Eyalcfish/DPort/queue"
 )
 
 func TestWorkers(t *testing.T) {

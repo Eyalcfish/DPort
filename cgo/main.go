@@ -9,7 +9,7 @@ import (
 	"sync"
 	"unsafe"
 
-	dport "github.com/Eyalcfish/DPort/src/dport"
+	dport "github.com/Eyalcfish/DPort"
 )
 
 var handleMu sync.Mutex

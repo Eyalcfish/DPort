@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	dport "github.com/Eyalcfish/DPort/src/dport"
+	dport "github.com/Eyalcfish/DPort"
 )
 
 func main() {

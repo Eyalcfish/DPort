@@ -2,7 +2,7 @@
 
 A dead-simple, ultra-low latency shared memory IPC library. Written in C, ported to pure Go (no cgo needed).
 
-I built this because I needed a way to blast data between processes as fast as possible without the overhead of sockets or named pipes. It uses pure spin-locks on shared memory flags for synchronization—perfect for tightly-coupled services where microsecond latency matters and you don't mind burning a thread.
+I built this because I needed a way to blast data between processes as fast as possible without the overhead of sockets or named pipes. It uses pure spin locks on shared memory flags for synchronization perfect for tightly coupled services where microsecond latency matters and you don't mind burning a thread.
 
 ### Features
 * **Zero CGO:** The Go port uses `x/sys` raw syscalls. 
@@ -17,7 +17,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/Eyalcfish/DPort/src/dport"
+	"github.com/Eyalcfish/DPort"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func main() {
 package main
 
 import (
-	"github.com/Eyalcfish/DPort/src/dport"
+	"github.com/Eyalcfish/DPort"
 )
 
 func main() {
@@ -68,4 +68,4 @@ bash test.bash
 ```
 
 ### Note on CPU Usage
-Because this uses busy-waiting (spinlock), the reading/writing goroutines will pin a CPU core to 100%. The Go port strategically uses `runtime.Gosched()` to prevent the Go scheduler from starving other goroutines, but it's still fundamentally a hot loop. Use this for high-frequency trading/gaming/realtime stuff, not for web servers.
+Because this uses busy waiting (spinlock), the reading/writing goroutines will pin a CPU core to 100%. The Go port strategically uses `runtime.Gosched()` to prevent the Go scheduler from starving other goroutines, but it's still fundamentally a hot loop. Use this for high-frequency trading/gaming/realtime stuff, not for web servers.

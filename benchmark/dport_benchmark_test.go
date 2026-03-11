@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	dport "github.com/Eyalcfish/DPort/src/dport"
-	"github.com/Eyalcfish/DPort/src/dport/queue"
+	dport "github.com/Eyalcfish/DPort"
+	"github.com/Eyalcfish/DPort/queue"
 )
 
 func BenchmarkRoundTrip(b *testing.B) {

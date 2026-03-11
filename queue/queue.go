@@ -3,7 +3,7 @@ package queue
 import (
 	"sync/atomic"
 
-	"github.com/Eyalcfish/DPort/src/dport"
+	dport "github.com/Eyalcfish/DPort"
 )
 
 type Package struct {

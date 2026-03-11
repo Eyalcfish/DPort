@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	dport "github.com/Eyalcfish/DPort/src/dport"
-	queue "github.com/Eyalcfish/DPort/src/dport/queue"
+	dport "github.com/Eyalcfish/DPort"
+	queue "github.com/Eyalcfish/DPort/queue"
 )
 
 func main() {
