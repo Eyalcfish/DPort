@@ -52,7 +52,7 @@ func openShm(name string) (unsafe.Pointer, platformHandle, error) {
 	shmSize := *(*uintptr)(unsafe.Pointer(&hdr[0]))
 	unix.Munmap(hdr)
 
-	totalSize := shmSize + uintptr(headerSize)
+	totalSize := uintptr(headerSize) + 2*(shmSize+sizeOfSizeT)
 	b, err := unix.Mmap(fd, 0, int(totalSize), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	if err != nil {
 		return nil, platformHandle{}, fmt.Errorf("mmap full: %w", err)

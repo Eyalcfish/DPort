@@ -30,7 +30,8 @@ type DMessage struct {
 type DConnection struct {
 	portName       string
 	basePtr        unsafe.Pointer
-	dataPtr        unsafe.Pointer
+	serverDataPtr  unsafe.Pointer
+	clientDataPtr  unsafe.Pointer
 	shmSize        uintptr
 	connectionType byte
 	identifier     byte // 1 = server (creator), 0 = client
@@ -42,7 +43,7 @@ func (c *DConnection) ConnectionType() byte { return c.connectionType }
 
 func Create(portName string, shmSize uintptr) (*DConnection, error) {
 
-	totalSize := shmSize + uintptr(headerSize)
+	totalSize := uintptr(headerSize) + 2*(shmSize+sizeOfSizeT)
 
 	basePtr, handle, err := createShm(portName, totalSize)
 	if err != nil {
@@ -63,7 +64,8 @@ func Create(portName string, shmSize uintptr) (*DConnection, error) {
 	atomicStoreByte(basePtr, offServerFlag, 1)
 	atomicStoreByte(basePtr, offClientFlag, 1)
 
-	conn.dataPtr = unsafe.Add(basePtr, headerSize)
+	conn.serverDataPtr = unsafe.Add(basePtr, headerSize)
+	conn.clientDataPtr = unsafe.Add(basePtr, headerSize+sizeOfSizeT+shmSize)
 	return conn, nil
 }
 
@@ -81,12 +83,13 @@ func Connect(portName string) (*DConnection, error) {
 		identifier:     0,
 		handle:         handle,
 	}
-	conn.dataPtr = unsafe.Add(basePtr, headerSize)
+	conn.serverDataPtr = unsafe.Add(basePtr, headerSize)
+	conn.clientDataPtr = unsafe.Add(basePtr, headerSize+sizeOfSizeT+conn.shmSize)
 	return conn, nil
 }
 
 func (c *DConnection) Close() {
-	closeShm(c.basePtr, c.shmSize+uintptr(headerSize), c.handle, c.identifier == 1)
+	closeShm(c.basePtr, uintptr(headerSize)+2*(c.shmSize+sizeOfSizeT), c.handle, c.identifier == 1)
 }
 
 func (c *DConnection) WriteBytes(bytes []byte) error {
@@ -99,15 +102,17 @@ func (c *DConnection) Write(msg *DMessage) error {
 	}
 
 	flagOff := offServerFlag
+	writePtr := c.clientDataPtr
 	if c.identifier == 1 {
 		flagOff = offClientFlag
+		writePtr = c.serverDataPtr
 	}
 
 	spinWaitByte(c.basePtr, flagOff, 1)
 
-	*(*uintptr)(c.dataPtr) = msg.Size
+	*(*uintptr)(writePtr) = msg.Size
 	copy(
-		unsafe.Slice((*byte)(unsafe.Add(c.dataPtr, sizeOfSizeT)), msg.Size),
+		unsafe.Slice((*byte)(unsafe.Add(writePtr, sizeOfSizeT)), msg.Size),
 		msg.Data,
 	)
 
@@ -117,17 +122,19 @@ func (c *DConnection) Write(msg *DMessage) error {
 
 func (c *DConnection) Read() DMessage {
 	flagOff := offClientFlag
+	readPtr := c.serverDataPtr
 	if c.identifier == 1 {
 		flagOff = offServerFlag
+		readPtr = c.clientDataPtr
 	}
 
 	spinWaitByte(c.basePtr, flagOff, 0)
 
-	size := *(*uintptr)(c.dataPtr)
+	size := *(*uintptr)(readPtr)
 	data := make([]byte, size)
 	copy(
 		data,
-		unsafe.Slice((*byte)(unsafe.Add(c.dataPtr, sizeOfSizeT)), size),
+		unsafe.Slice((*byte)(unsafe.Add(readPtr, sizeOfSizeT)), size),
 	)
 
 	atomicStoreByte(c.basePtr, flagOff, 1)
