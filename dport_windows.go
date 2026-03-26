@@ -32,7 +32,7 @@ func createShm(name string, totalSize uintptr) (unsafe.Pointer, platformHandle, 
 		windows.InvalidHandle,
 		nil,
 		windows.PAGE_READWRITE,
-		0,
+		uint32(totalSize>>32),
 		uint32(totalSize),
 		namePtr,
 	)

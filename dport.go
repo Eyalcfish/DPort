@@ -9,9 +9,9 @@ import (
 
 const sizeOfSizeT = unsafe.Sizeof(uintptr(0))
 
-// headerSize matches the C packed DConnectionHeader.
-// Layout: size_t | char | uchar | uchar | [int futex_flag on Linux]
-const headerSize = sizeOfSizeT + 1 + 1 + 1 + headerFutexSize
+// headerSize matches the C packed DConnectionHeader, padded for alignment.
+// Layout: size_t | char | uchar | uchar | [int futex_flag on Linux] | padding...
+const headerSize = 32
 
 const (
 	offShmSize    = 0
