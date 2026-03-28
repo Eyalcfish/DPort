@@ -1,15 +1,15 @@
 # DPort
 
-A dead-simple, ultra-low latency shared memory IPC library. Written in C, ported to pure Go (no cgo needed).
+A dead-simple, ultra-low latency shared memory IPC(Inter-Process-Communication) library. Written in C, rewritten to pure Go (no cgo needed).
 
-I built this because I needed a way to blast data between processes as fast as possible without the overhead of sockets or named pipes. It uses pure spin locks on shared memory flags for synchronization perfect for tightly coupled services where microsecond latency matters and you don't mind burning a thread.
+I built this because I needed a way to move data between processes as fast as possible without the overhead of sockets or named pipes. It uses pure spin locks on shared memory flags for synchronization perfect for tightly coupled services where microsecond latency matters and you don't mind burning a thread.
 
 ### Features
 * **Zero CGO:** The Go port uses `x/sys` raw syscalls. 
-* **Cross-platform:** Works on Windows and Linux (`/dev/shm` + `mmap`).
-* **Binary Compatible:** You can swap data directly between the C and Go implementations. The memory layout is strictly identical.
+* **Cross-platform:** Works on Windows and Linux and macOS.
+* **Binary Compatible:** You can swap data directly between the DLL and Go implementations. The memory layout is identical.
 
-### Usage
+### Example
 
 **Server (Go)**
 ```go
@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	// Create a 1024-byte shared memory region
+	// Create a 1024-byte shared memory region(its actually more bytes depending on OS page size)
 	conn, err := dport.Create("my_port", 1024)
 	if err != nil {
 		panic(err)
@@ -57,15 +57,5 @@ func main() {
 }
 ```
 
-### Testing
-
-```bash
-# Windows
-test.bat
-
-# Linux
-bash test.bash
-```
-
 ### Note on CPU Usage
-Because this uses busy waiting (spinlock), the reading/writing goroutines will pin a CPU core to 100%. The Go port strategically uses `runtime.Gosched()` to prevent the Go scheduler from starving other goroutines, but it's still fundamentally a hot loop. Use this for high-frequency trading/gaming/realtime stuff, not for web servers.
+Because this uses busy waiting (spinlock), the reading/writing goroutines will pin a CPU core to 100%. The Go port uses `runtime.Gosched()` to prevent the Go scheduler from starving other goroutines, but it's still fundamentally a hot loop. Use this for high-frequency gaming/realtime stuff.

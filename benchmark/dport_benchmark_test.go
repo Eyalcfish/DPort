@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	dport "github.com/Eyalcfish/DPort"
-	"github.com/Eyalcfish/DPort/queue"
 )
 
 func BenchmarkRoundTrip(b *testing.B) {
@@ -35,7 +34,7 @@ func BenchmarkRoundTrip(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cli.Write(msg)
+		cli.Write(msg, 1)
 	}
 	<-done
 }
@@ -61,14 +60,14 @@ func BenchmarkPingPong(b *testing.B) {
 	go func() {
 		for i := 0; i < b.N; i++ {
 			srv.Read()
-			srv.Write(msg)
+			srv.Write(msg, 2)
 		}
 		close(done)
 	}()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cli.Write(msg)
+		cli.Write(msg, 1)
 		cli.Read()
 	}
 	<-done
@@ -78,7 +77,7 @@ func BenchmarkThroughput(b *testing.B) {
 	for _, size := range []int{64, 256, 1024, 4096, 100000, 1000000} {
 		b.Run(fmt.Sprintf("%dB", size), func(b *testing.B) {
 			port := fmt.Sprintf("bench_tp_%d", size)
-			srv, err := dport.Create(port, uintptr(size+64))
+			srv, err := dport.Create(port, uintptr(size+128)) // Added buffer
 			if err != nil {
 				b.Fatalf("Create: %v", err)
 			}
@@ -104,66 +103,46 @@ func BenchmarkThroughput(b *testing.B) {
 			b.SetBytes(int64(size))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				cli.Write(msg)
+				cli.Write(msg, 1)
 			}
 			<-done
 		})
 	}
 }
 
-func BenchmarkWorkers(b *testing.B) {
-	const port = "bench_workers"
+func BenchmarkSimpleTransfer(b *testing.B) {
+	const port = "bench_simple"
 	payload := []byte("bench-payload!") // 14 bytes
 
 	srv, err := dport.Create(port, 1024)
 	if err != nil {
 		b.Fatalf("Create: %v", err)
 	}
+	defer srv.Close()
 
 	cli, err := dport.Connect(port)
 	if err != nil {
-		srv.Close()
 		b.Fatalf("Connect: %v", err)
 	}
+	defer cli.Close()
 
-	head := &queue.Package{}
 	n := b.N
+	msg := &dport.DMessage{Size: uintptr(len(payload)), Data: payload}
 
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
-		tail := head
 		for i := 0; i < n; i++ {
-			msg := srv.Read()
-			tail = queue.WriteToPackage(tail, &msg)
-		}
-	}()
-
-	writerDone := make(chan struct{})
-	go func() {
-		defer close(writerDone)
-		for i := 0; i < n; i++ {
-			cli.Write(&dport.DMessage{Size: uintptr(len(payload)), Data: payload})
+			srv.Read()
 		}
 	}()
 
 	b.SetBytes(int64(len(payload)))
 	b.ResetTimer()
 
-	cur := head
 	for i := 0; i < n; i++ {
-		var ok bool
-		for {
-			_, cur, ok = queue.ReadFromPackage(cur)
-			if ok {
-				break
-			}
-		}
+		cli.Write(msg, 1)
 	}
 
-	b.StopTimer()
 	<-readerDone
-	<-writerDone
-	cli.Close()
-	srv.Close()
 }

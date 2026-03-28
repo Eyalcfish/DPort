@@ -77,7 +77,7 @@ func DPort_Close(handle C.int) {
 // Returns 0 on success, -1 on failure.
 //
 //export DPort_Write
-func DPort_Write(handle C.int, data unsafe.Pointer, size C.uint64_t) C.int {
+func DPort_Write(handle C.int, data unsafe.Pointer, size C.uint64_t, target C.uint64_t) C.int {
 	conn := getConn(handle)
 	if conn == nil {
 		return -1
@@ -87,7 +87,7 @@ func DPort_Write(handle C.int, data unsafe.Pointer, size C.uint64_t) C.int {
 	err := conn.Write(&dport.DMessage{
 		Size: uintptr(size),
 		Data: goData,
-	})
+	}, uint64(target))
 	if err != nil {
 		return -1
 	}
@@ -118,28 +118,6 @@ func DPort_Read(handle C.int, buf unsafe.Pointer, bufSize C.uint64_t) C.longlong
 	)
 
 	return C.longlong(msg.Size)
-}
-
-// DPort_ShmSize returns the shared memory size for a connection.
-//
-//export DPort_ShmSize
-func DPort_ShmSize(handle C.int) C.uint64_t {
-	conn := getConn(handle)
-	if conn == nil {
-		return 0
-	}
-	return C.uint64_t(conn.ShmSize())
-}
-
-// DPort_ConnectionType returns the connection type byte.
-//
-//export DPort_ConnectionType
-func DPort_ConnectionType(handle C.int) C.char {
-	conn := getConn(handle)
-	if conn == nil {
-		return 0
-	}
-	return C.char(conn.ConnectionType())
 }
 
 func main() {}
