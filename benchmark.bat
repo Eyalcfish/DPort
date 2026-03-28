@@ -1,5 +1,5 @@
 @echo off
-echo === Running DPort benchmarks ===
+echo Running DPort benchmarks...
 set CGO_ENABLED=0
 
 if not exist benchmark_logs mkdir benchmark_logs

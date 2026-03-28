@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	dport "github.com/Eyalcfish/DPort"
-	queue "github.com/Eyalcfish/DPort/queue"
 )
 
 func main() {
@@ -14,18 +13,11 @@ func main() {
 	}
 	defer conn.Close()
 
-	killSwitch := uint8(0)
-	_, writeQueue := queue.StartWorkers(conn, &killSwitch)
-
 	buf := []byte("asd")
 	for i := 0; i < 10; i++ {
 		buf[2] = '0' + byte(i%10)
 		msg := &dport.DMessage{Size: uintptr(len(buf)), Data: buf}
 		fmt.Printf("Sending message: %s\n", buf)
-		writeQueue = queue.WriteWithWorker(writeQueue, msg)
-	}
-	// killSwitch = 1
-	for {
-		// wait for goroutines to do thier job
+		conn.Write(msg, 1)
 	}
 }

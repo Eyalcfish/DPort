@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-echo "=== Running benchmarks ==="
+echo "Running DPort benchmarks..."
 mkdir -p benchmark_logs
 LOG_FILE="benchmark_logs/bench_$(date +%Y-%m-%d_%H-%M-%S).log"
 
