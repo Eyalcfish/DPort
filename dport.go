@@ -3,6 +3,7 @@ package dport
 import (
 	"errors"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -28,14 +29,17 @@ type DMessage struct {
 }
 
 type DConnection struct {
-	portName       string
-	basePtr        unsafe.Pointer
-	serverDataPtr  unsafe.Pointer
-	clientDataPtr  unsafe.Pointer
-	shmSize        uintptr
-	connectionType byte
-	identifier     byte // 1 = server (creator), 0 = client
-	handle         platformHandle
+	portName        string
+	basePtr         unsafe.Pointer
+	serverDataPtr   unsafe.Pointer
+	clientDataPtr   unsafe.Pointer
+	shmSize         uintptr
+	connectionType  byte
+	identifier      byte // 1 = server (creator), 0 = client
+	handle          platformHandle
+	lastReadFlagOff uintptr
+	hasPendingAck   bool
+	mu              sync.Mutex
 }
 
 func (c *DConnection) ShmSize() uintptr     { return c.shmSize }
@@ -89,12 +93,25 @@ func Connect(portName string) (*DConnection, error) {
 }
 
 func (c *DConnection) Close() {
+	c.mu.Lock()
+	if c.hasPendingAck {
+		atomicStoreByte(c.basePtr, c.lastReadFlagOff, stateEmpty)
+		c.hasPendingAck = false
+	}
+	c.mu.Unlock()
 	closeShm(c.basePtr, uintptr(headerSize)+2*(c.shmSize+sizeOfSizeT), c.handle, c.identifier == 1)
 }
 
 func (c *DConnection) WriteBytes(bytes []byte) error {
 	return c.Write(&DMessage{Data: bytes, Size: uintptr(len(bytes))})
 }
+
+const (
+	stateReady   = 0
+	stateEmpty   = 1
+	stateReading = 2
+	stateWriting = 3
+)
 
 func (c *DConnection) Write(msg *DMessage) error {
 	if msg.Size > c.shmSize {
@@ -108,7 +125,12 @@ func (c *DConnection) Write(msg *DMessage) error {
 		writePtr = c.serverDataPtr
 	}
 
-	spinWaitByte(c.basePtr, flagOff, 1)
+	for {
+		if atomicCASByte(c.basePtr, flagOff, stateEmpty, stateWriting) {
+			break
+		}
+		runtime.Gosched()
+	}
 
 	*(*uintptr)(writePtr) = msg.Size
 	copy(
@@ -128,7 +150,20 @@ func (c *DConnection) Read() DMessage {
 		readPtr = c.clientDataPtr
 	}
 
-	spinWaitByte(c.basePtr, flagOff, 0)
+	for {
+		if atomicCASByte(c.basePtr, flagOff, stateReady, stateReading) {
+			break
+		}
+
+		c.mu.Lock()
+		if c.hasPendingAck {
+			atomicStoreByte(c.basePtr, c.lastReadFlagOff, stateEmpty)
+			c.hasPendingAck = false
+		}
+		c.mu.Unlock()
+
+		runtime.Gosched()
+	}
 
 	size := *(*uintptr)(readPtr)
 	data := make([]byte, size)
@@ -137,26 +172,28 @@ func (c *DConnection) Read() DMessage {
 		unsafe.Slice((*byte)(unsafe.Add(readPtr, sizeOfSizeT)), size),
 	)
 
-	atomicStoreByte(c.basePtr, flagOff, 1)
+	c.mu.Lock()
+	c.lastReadFlagOff = flagOff
+	c.hasPendingAck = true
+	c.mu.Unlock()
 
 	return DMessage{Size: size, Data: data}
 }
 
-func spinWaitByte(basePtr unsafe.Pointer, flagOff uintptr, target byte) {
-	aligned := (*uint32)(unsafe.Add(basePtr, flagOff & ^uintptr(3)))
+func atomicCASByte(basePtr unsafe.Pointer, flagOff uintptr, oldVal, newVal byte) bool {
+	aligned := (*uint32)(unsafe.Add(basePtr, flagOff&^uintptr(3)))
 	shift := uint((flagOff & 3) * 8)
-	want := uint32(target) << shift
 	mask := uint32(0xFF) << shift
+	oldBits := uint32(oldVal) << shift
+	newBits := uint32(newVal) << shift
 
-	for i := 0; ; i++ {
-		if atomic.LoadUint32(aligned)&mask == want {
-			return
-		}
-		if i&0x3F == 0 { // TODO: choose whatever todo with this
-			runtime.Gosched()
-		}
+	oldUint32 := atomic.LoadUint32(aligned)
+	if (oldUint32 & mask) != oldBits {
+		return false
 	}
+	return atomic.CompareAndSwapUint32(aligned, oldUint32, (oldUint32&^mask)|newBits)
 }
+
 
 func atomicStoreByte(basePtr unsafe.Pointer, flagOff uintptr, val byte) {
 	aligned := (*uint32)(unsafe.Add(basePtr, flagOff & ^uintptr(3)))
