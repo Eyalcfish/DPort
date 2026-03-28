@@ -16,11 +16,11 @@ const sizeOfSizeT = unsafe.Sizeof(uint64(0))
 
 const (
 	offShmSize         = 0
-	offConnType        = sizeOfSizeT
-	offSenderFlagOff   = sizeOfSizeT + 1
-	offReceiverFlagOff = sizeOfSizeT*2 + 1
-	offClientsCount    = sizeOfSizeT*3 + 1
-	offMessageSize     = sizeOfSizeT*4 + 1
+	offConnType        = 8
+	offSenderFlagOff   = 16
+	offReceiverFlagOff = 24
+	offClientsCount    = 32
+	offMessageSize     = 40
 )
 
 type DMessage struct {
