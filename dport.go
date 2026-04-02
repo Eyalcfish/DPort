@@ -15,6 +15,11 @@ const headerSize = 64
 const sizeOfSizeT = unsafe.Sizeof(uint64(0))
 
 const (
+	TargetServer      uint64 = 1 // Target identifier for the server (creator)
+	TargetFirstClient uint64 = 2 // Target identifier for the first client to connect
+)
+
+const (
 	offShmSize         = 0
 	offConnType        = 8
 	offSenderFlagOff   = 16
@@ -34,7 +39,7 @@ type DConnection struct {
 	dataPtr         unsafe.Pointer
 	shmSize         uintptr
 	connectionType  byte
-	identifier      uint64 // 1 = server (creator), 0 = client
+	identifier      uint64 // TargetServer = server (creator), >1 = client
 	handle          platformHandle
 	lastReadFlagOff uintptr
 	mu              sync.Mutex
@@ -54,7 +59,7 @@ func Create(portName string, shmSize uintptr) (*DConnection, error) {
 		basePtr:        basePtr,
 		shmSize:        shmSize,
 		connectionType: 2,
-		identifier:     1,
+		identifier:     TargetServer,
 		handle:         handle,
 	}
 

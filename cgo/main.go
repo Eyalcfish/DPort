@@ -3,6 +3,9 @@ package main
 /*
 #include <stdint.h>
 #include <stdlib.h>
+
+#define DPORT_TARGET_SERVER 1
+#define DPORT_TARGET_FIRST_CLIENT 2
 */
 import "C"
 import (
