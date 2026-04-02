@@ -53,7 +53,7 @@ func main() {
 	conn.Write(&dport.DMessage{
 		Size: 5,
 		Data: []byte("hello"),
-	})
+	}, dport.TargetServer)
 }
 ```
 
